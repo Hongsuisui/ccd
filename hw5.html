@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>零件分類與庫存預警系統</title>
+  <!-- 引入 SheetJS 函式庫以支援 Excel 匯入與匯出 -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg-color: #faf8f5;
+      --card-bg: #ffffff;
+      --accent-blue: #3b82f6;
+      --border-blue: #60a5fa;
+      --light-blue: #eff6ff;
+      --coral-red: #f87171;
+      --dark-red: #ef4444;
+      --light-red: #fef2f2;
+      --text-main: #1f2937;
+      --text-muted: #6b7280;
+      --border-color: #93c5fd;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+    }
+
+    /* 頂部控制與標題列 */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .main-title {
+      font-size: 32px;
+      font-weight: 800;
+      color: #2563eb;
+      letter-spacing: 4px;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn-action {
+      background-color: #ffffff;
+      border: 1.5px solid #d1d5db;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: #374151;
+      transition: all 0.2s;
+    }
+
+    .btn-action:hover {
+      background-color: #f3f4f6;
+      border-color: #9ca3af;
+    }
+
+    #fileInput {
+      display: none;
+    }
+
+    /* 三欄排版容器 */
+    .dashboard-container {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr 1fr;
+      gap: 20px;
+      flex: 1;
+      min-height: 600px;
+    }
+
+    @media (max-width: 992px) {
+      .dashboard-container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* 共同欄位樣式（對應草圖藍色框線） */
+    .column-box {
+      background-color: var(--card-bg);
+      border: 2px solid var(--border-color);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+
+    .col-header-badge {
+      background-color: var(--light-blue);
+      border: 1.5px solid var(--border-blue);
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #1e40af;
+      text-align: center;
+      margin-bottom: 14px;
+    }
+
+    /* 第一欄：搜尋與分類 */
+    .search-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .search-input {
+      flex: 1;
+      background-color: var(--light-blue);
+      border: 1.5px solid var(--border-blue);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+
+    .btn-search {
+      background-color: var(--light-red);
+      border: 1.5px solid var(--coral-red);
+      color: var(--dark-red);
+      width: 44px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 18px;
+      transition: all 0.2s;
+    }
+
+    .btn-search:hover {
+      background-color: var(--coral-red);
+      color: #ffffff;
+    }
+
+    .category-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    /* 草圖紅色分類按鈕 */
+    .btn-category {
+      background-color: #fee2e2;
+      border: 1.5px solid var(--coral-red);
+      color: #991b1b;
+      padding: 14px 16px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .btn-category:hover {
+      background-color: #fecaca;
+    }
+
+    .btn-category.active {
+      background-color: var(--coral-red);
+      color: #ffffff;
+      border-color: var(--dark-red);
+      box-shadow: 0 2px 4px rgba(239, 68, 68, 0.25);
+    }
+
+    /* 第二欄：分類零件明細列表 */
+    .items-container {
+      flex: 1;
+      overflow-y: auto;
+      border: 1.5px solid var(--border-color);
+      border-radius: 8px;
+      background-color: #f9fafb;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .item-card {
+      background-color: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .item-card:hover {
+      border-color: var(--accent-blue);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .item-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: #111827;
+      margin-bottom: 4px;
+    }
+
+    .item-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* 第三欄：低庫存清單與匯出 */
+    .scope-selector {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+      padding: 0 4px;
+      font-size: 13px;
+      color: #4b5563;
+    }
+
+    .scope-selector label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    .alert-container {
+      flex: 1;
+      overflow-y: auto;
+      border: 1.5px solid var(--border-color);
+      border-radius: 8px;
+      background-color: var(--light-red);
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .alert-card {
+      background-color: #ffffff;
+      border: 1px solid #fca5a5;
+      border-radius: 6px;
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .alert-info-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #991b1b;
+      max-width: 65%;
+      word-break: break-all;
+    }
+
+    .alert-badge {
+      background-color: #fef2f2;
+      border: 1px solid var(--coral-red);
+      color: var(--dark-red);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .btn-export {
+      background-color: #fee2e2;
+      border: 2px solid var(--coral-red);
+      color: var(--dark-red);
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+    }
+
+    .btn-export:hover {
+      background-color: var(--coral-red);
+      color: #ffffff;
+    }
+
+    /* 零件修改彈窗 (Modal) */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0, 0, 0, 0.4);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 999;
+    }
+
+    .modal-content {
+      background-color: #ffffff;
+      border-radius: 12px;
+      padding: 24px;
+      width: 90%;
+      max-width: 420px;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
+
+    .modal-header {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: #1f2937;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    .counter-control {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-counter {
+      padding: 6px 14px;
+      background-color: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .empty-hint {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="main-title">零 件 分 類</div>
+    <div class="top-actions">
+      <button class="btn-action" onclick="document.getElementById('fileInput').click()">📥 匯入輸入專用表 (Excel/CSV)</button>
+      <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" onchange="handleFileImport(event)">
+      <button class="btn-action" onclick="resetToDefaultData()">🔄 重置預設資料</button>
+    </div>
+  </header>
+
+  <div class="dashboard-container">
+    <!-- 第一欄：分類與搜尋 -->
+    <div class="column-box">
+      <div class="search-row">
+        <input type="text" id="categorySearch" class="search-input" placeholder="現有零件搜尋（分類）" oninput="renderCategories()">
+        <button class="btn-search" title="搜尋" onclick="renderCategories()">🔍</button>
+      </div>
+      <div class="category-list" id="categoryList">
+        <!-- 分類按鈕將動態產生 -->
+      </div>
+    </div>
+
+    <!-- 第二欄：分類所屬零件清單 -->
+    <div class="column-box">
+      <div class="col-header-badge" id="currentCategoryLabel">
+        剛剛在 ① 選的零件分類
+      </div>
+      <div class="items-container" id="itemsContainer">
+        <!-- 零件卡片將動態產生 -->
+      </div>
+    </div>
+
+    <!-- 第三欄：低庫存清單與匯出 -->
+    <div class="column-box">
+      <div class="col-header-badge" style="background-color: #fee2e2; border-color: var(--coral-red); color: #991b1b;">
+        低 庫 存 清 單
+      </div>
+      <div class="scope-selector">
+        <label>
+          <input type="radio" name="alertScope" value="all" checked onchange="renderAlerts()"> 全廠低庫存
+        </label>
+        <label>
+          <input type="radio" name="alertScope" value="category" onchange="renderAlerts()"> 依當前分類顯示
+        </label>
+      </div>
+      <div class="alert-container" id="alertContainer">
+        <!-- 警報品項將動態產生 -->
+      </div>
+      <button class="btn-export" onclick="exportLowStockExcel()">一鍵匯出 (Excel 表)</button>
+    </div>
+  </div>
+
+  <!-- 零件詳細與修改彈窗 -->
+  <div class="modal-overlay" id="editModal">
+    <div class="modal-content">
+      <div class="modal-header">編輯零件庫存</div>
+      <div class="form-group">
+        <label>產品名稱</label>
+        <input type="text" id="modalName" readonly style="background-color: #f3f4f6;">
+      </div>
+      <div class="form-group">
+        <label>產品代碼</label>
+        <input type="text" id="modalCode" readonly style="background-color: #f3f4f6;">
+      </div>
+      <div class="form-group">
+        <label>產品所屬分類</label>
+        <input type="text" id="modalCategory" readonly style="background-color: #f3f4f6;">
+      </div>
+      <div class="form-group">
+        <label>產品現有數量</label>
+        <div class="counter-control">
+          <button class="btn-counter" onclick="adjustModalQty(-1)">-1</button>
+          <button class="btn-counter" onclick="adjustModalQty(-5)">-5</button>
+          <input type="number" id="modalStock" style="text-align: center;">
+          <button class="btn-counter" onclick="adjustModalQty(1)">+1</button>
+          <button class="btn-counter" onclick="adjustModalQty(5)">+5</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>產品低水位安全存量</label>
+        <input type="number" id="modalMinStock">
+      </div>
+      <div class="modal-actions">
+        <button class="btn-action" onclick="closeModal()">取消</button>
+        <button class="btn-action" style="background-color: #3b82f6; color: #fff; border-color: #2563eb;" onclick="saveModalChanges()">儲存更新</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 預設示範數據（依據草圖規格設置）
+    const defaultProducts = [
+      {
+        "產品名稱": "CO3M-DRG 黑/紅-285MM-700P",
+        "產品代碼": "SKU-CO3M-001",
+        "產品所屬分類": "外購 CO3 半成品",
+        "產品現有數量": 28,
+        "產品低水位": 40
+      },
+      {
+        "產品名稱": "CO3M-DRG 黑/黑-285MM-700P",
+        "產品代碼": "SKU-CO3M-002",
+        "產品所屬分類": "外購 CO3 半成品",
+        "產品現有數量": 45,
+        "產品低水位": 40
+      },
+      {
+        "產品名稱": "CO3 阻尼彈簧-008-340-75P-B/B",
+        "產品代碼": "SKU-CO3-SP01",
+        "產品所屬分類": "自製 CO3 零件",
+        "產品現有數量": 15,
+        "產品低水位": 40
+      },
+      {
+        "產品名稱": "CO3 阻尼彈簧-008-330-75P-B/R",
+        "產品代碼": "SKU-CO3-SP02",
+        "產品所屬分類": "自製 CO3 零件",
+        "產品現有數量": 12,
+        "產品低水位": 30
+      },
+      {
+        "產品名稱": "CO3CNC 下座接頭-DRG 專用",
+        "產品代碼": "SKU-CO3-CN01",
+        "產品所屬分類": "自製 CO3 零件",
+        "產品現有數量": 35,
+        "產品低水位": 30
+      }
+    ];
+
+    let currentProducts = [];
+    let selectedCategory = "";
+    let activeEditingIndex = -1;
+
+    // 初始化
+    function init() {
+      const savedData = localStorage.getItem("inventory_data");
+      if (savedData) {
+        try {
+          currentProducts = JSON.parse(savedData);
+        } catch (e) {
+          currentProducts = JSON.parse(JSON.stringify(defaultProducts));
+        }
+      } else {
+        currentProducts = JSON.parse(JSON.stringify(defaultProducts));
+      }
+
+      if (currentProducts.length > 0) {
+        selectedCategory = currentProducts[0]["產品所屬分類"];
+      }
+
+      renderCategories();
+      renderItems();
+      renderAlerts();
+    }
+
+    function saveState() {
+      localStorage.setItem("inventory_data", JSON.stringify(currentProducts));
+    }
+
+    function resetToDefaultData() {
+      if (confirm("確定要重置為預設示範資料嗎？")) {
+        currentProducts = JSON.parse(JSON.stringify(defaultProducts));
+        selectedCategory = currentProducts[0]["產品所屬分類"];
+        saveState();
+        renderCategories();
+        renderItems();
+        renderAlerts();
+      }
+    }
+
+    // 取得所有唯一分類
+    function getAllCategories() {
+      const categories = new Set();
+      currentProducts.forEach(item => {
+        if (item["產品所屬分類"]) {
+          categories.add(item["產品所屬分類"].trim());
+        }
+      });
+      return Array.from(categories);
+    }
+
+    // 第一欄：渲染分類按鈕
+    function renderCategories() {
+      const categoryListEl = document.getElementById("categoryList");
+      const searchKeyword = document.getElementById("categorySearch").value.trim().toLowerCase();
+      const allCategories = getAllCategories();
+
+      categoryListEl.innerHTML = "";
+
+      const filteredCategories = allCategories.filter(cat => 
+        cat.toLowerCase().includes(searchKeyword)
+      );
+
+      if (filteredCategories.length === 0) {
+        categoryListEl.innerHTML = `<div class="empty-hint">無匹配分類</div>`;
+        return;
+      }
+
+      filteredCategories.forEach(cat => {
+        const btn = document.createElement("button");
+        btn.className = `btn-category ${cat === selectedCategory ? 'active' : ''}`;
+        
+        // 計算該分類低水位品項數
+        const lowStockCount = currentProducts.filter(item => 
+          item["產品所屬分類"] === cat && Number(item["產品現有數量"]) < Number(item["產品低水位"])
+        ).length;
+
+        btn.innerHTML = `
+          <span>${cat}</span>
+          ${lowStockCount > 0 ? `<span style="font-size: 11px; background: rgba(255,255,255,0.7); padding: 2px 6px; border-radius: 10px;">⚠️ ${lowStockCount}</span>` : ''}
+        `;
+
+        btn.onclick = () => {
+          selectedCategory = cat;
+          renderCategories();
+          renderItems();
+          // 若第三欄切換為依分類顯示，需連動更新
+          const scope = document.querySelector('input[name="alertScope"]:checked').value;
+          if (scope === "category") {
+            renderAlerts();
+          }
+        };
+
+        categoryListEl.appendChild(btn);
+      });
+    }
+
+    // 第二欄：渲染分類所屬零件
+    function renderItems() {
+      const itemsContainerEl = document.getElementById("itemsContainer");
+      const currentCategoryLabelEl = document.getElementById("currentCategoryLabel");
+
+      currentCategoryLabelEl.textContent = selectedCategory || "未選取分類";
+      itemsContainerEl.innerHTML = "";
+
+      const itemsInCat = currentProducts
+        .map((item, index) => ({ ...item, originalIndex: index }))
+        .filter(item => item["產品所屬分類"] === selectedCategory);
+
+      if (itemsInCat.length === 0) {
+        itemsContainerEl.innerHTML = `<div class="empty-hint">此分類下尚無零件資料</div>`;
+        return;
+      }
+
+      itemsInCat.forEach((item, idx) => {
+        const isLow = Number(item["產品現有數量"]) < Number(item["產品低水位"]);
+        const card = document.createElement("div");
+        card.className = "item-card";
+        card.innerHTML = `
+          <div class="item-title">${idx + 1}. ${item["產品名稱"]}</div>
+          <div class="item-sub">
+            <span>代碼: ${item["產品代碼"]}</span>
+            <span style="font-weight: 600; color: ${isLow ? 'var(--dark-red)' : '#10b981'};">
+              庫存: ${item["產品現有數量"]} / ${item["產品低水位"]} ${isLow ? '(不足)' : ''}
+            </span>
+          </div>
+        `;
+        card.onclick = () => openEditModal(item.originalIndex);
+        itemsContainerEl.appendChild(card);
+      });
+    }
+
+    // 第三欄：渲染低庫存警戒清單
+    function renderAlerts() {
+      const alertContainerEl = document.getElementById("alertContainer");
+      const scope = document.querySelector('input[name="alertScope"]:checked').value;
+
+      alertContainerEl.innerHTML = "";
+
+      let targetList = currentProducts;
+      if (scope === "category") {
+        targetList = currentProducts.filter(item => item["產品所屬分類"] === selectedCategory);
+      }
+
+      // 低庫存判斷標準：現有數量 < 低水位
+      const lowStockList = targetList.filter(item => 
+        Number(item["產品現有數量"]) < Number(item["產品低水位"])
+      );
+
+      if (lowStockList.length === 0) {
+        alertContainerEl.innerHTML = `<div class="empty-hint" style="color: #065f46;">✨ 目前庫存安全，無缺料品項</div>`;
+        return;
+      }
+
+      lowStockList.forEach((item, idx) => {
+        const card = document.createElement("div");
+        card.className = "alert-card";
+        card.innerHTML = `
+          <div class="alert-info-title">${idx + 1}. ${item["產品名稱"]}</div>
+          <div class="alert-badge">${item["產品現有數量"]} / ${item["產品低水位"]}</div>
+        `;
+        alertContainerEl.appendChild(card);
+      });
+    }
+
+    // 彈窗編輯邏輯
+    function openEditModal(index) {
+      activeEditingIndex = index;
+      const item = currentProducts[index];
+      document.getElementById("modalName").value = item["產品名稱"];
+      document.getElementById("modalCode").value = item["產品代碼"];
+      document.getElementById("modalCategory").value = item["產品所屬分類"];
+      document.getElementById("modalStock").value = item["產品現有數量"];
+      document.getElementById("modalMinStock").value = item["產品低水位"];
+      document.getElementById("editModal").style.display = "flex";
+    }
+
+    function closeModal() {
+      document.getElementById("editModal").style.display = "none";
+      activeEditingIndex = -1;
+    }
+
+    function adjustModalQty(delta) {
+      const stockInput = document.getElementById("modalStock");
+      let currentVal = parseInt(stockInput.value, 10) || 0;
+      currentVal = Math.max(0, currentVal + delta);
+      stockInput.value = currentVal;
+    }
+
+    function saveModalChanges() {
+      if (activeEditingIndex > -1) {
+        currentProducts[activeEditingIndex]["產品現有數量"] = parseInt(document.getElementById("modalStock").value, 10) || 0;
+        currentProducts[activeEditingIndex]["產品低水位"] = parseInt(document.getElementById("modalMinStock").value, 10) || 0;
+        saveState();
+        closeModal();
+        renderCategories();
+        renderItems();
+        renderAlerts();
+      }
+    }
+
+    // Excel / CSV 匯入解析
+    function handleFileImport(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+          if (jsonData.length === 0) {
+            alert("匯入的檔案無資料！");
+            return;
+          }
+
+          // 驗證是否具備約定之欄位格式
+          const requiredKeys = ["產品名稱", "產品代碼", "產品所屬分類", "產品現有數量", "產品低水位"];
+          const firstRow = jsonData[0];
+          const hasAllKeys = requiredKeys.every(k => Object.keys(firstRow).includes(k));
+
+          if (!hasAllKeys) {
+            alert("格式錯誤！輸入專用表第一列必須包含：\n產品名稱 ｜ 產品代碼 ｜ 產品所屬分類 ｜ 產品現有數量 ｜ 產品低水位");
+            return;
+          }
+
+          currentProducts = jsonData.map(row => ({
+            "產品名稱": String(row["產品名稱"] || ""),
+            "產品代碼": String(row["產品代碼"] || ""),
+            "產品所屬分類": String(row["產品所屬分類"] || "未分類"),
+            "產品現有數量": Number(row["產品現有數量"] || 0),
+            "產品低水位": Number(row["產品低水位"] || 0)
+          }));
+
+          selectedCategory = currentProducts[0]["產品所屬分類"];
+          saveState();
+          renderCategories();
+          renderItems();
+          renderAlerts();
+          alert(`成功匯入 ${currentProducts.length} 筆零件資料！`);
+        } catch (err) {
+          alert("檔案解析失敗，請確認檔案格式是否正確。");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      e.target.value = "";
+    }
+
+    // 一鍵匯出 Excel（輸出專用表）
+    function exportLowStockExcel() {
+      const scope = document.querySelector('input[name="alertScope"]:checked').value;
+      let targetList = currentProducts;
+
+      if (scope === "category") {
+        targetList = currentProducts.filter(item => item["產品所屬分類"] === selectedCategory);
+      }
+
+      // 嚴格篩選出小於低水位的品項
+      const exportData = targetList
+        .filter(item => Number(item["產品現有數量"]) < Number(item["產品低水位"]))
+        .map(item => ({
+          "產品名稱": item["產品名稱"],
+          "產品代碼": item["產品代碼"],
+          "產品所屬分類": item["產品所屬分類"],
+          "產品現有數量": item["產品現有數量"],
+          "產品低水位": item["產品低水位"]
+        }));
+
+      if (exportData.length === 0) {
+        alert("目前選取範圍內沒有低於水位的零件，無須匯出！");
+        return;
+      }
+
+      // 生成 WorkSheet
+      const ws = XLSX.utils.json_to_sheet(exportData, {
+        header: ["產品名稱", "產品代碼", "產品所屬分類", "產品現有數量", "產品低水位"]
+      });
+
+      // 設定欄寬自適應美化
+      ws['!cols'] = [
+        { wch: 32 }, // 產品名稱
+        { wch: 16 }, // 產品代碼
+        { wch: 18 }, // 產品所屬分類
+        { wch: 14 }, // 產品現有數量
+        { wch: 14 }  // 產品低水位
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "低庫存補貨清單");
+
+      const today = new Date().toISOString().slice(0, 10);
+      const filename = `低庫存補貨清單_${scope === 'all' ? '全廠' : selectedCategory}_${today}.xlsx`;
+      XLSX.writeFile(wb, filename);
+    }
+
+    // 啟動初始化
+    window.onload = init;
+  </script>
+</body>
+</html>
+
