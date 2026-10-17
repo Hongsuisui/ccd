@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>零件分類與庫存預警系統</title>
-  <!-- 引入 SheetJS 函式庫以支援 Excel 匯入與匯出 -->
+  <!-- 引入 SheetJS 函式庫以支援 Excel 與 CSV 匯入/匯出 -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -37,6 +37,7 @@
       padding: 20px;
     }
 
+    /* 頂部標題與工具列 */
     header {
       display: flex;
       justify-content: space-between;
@@ -80,6 +81,7 @@
       display: none;
     }
 
+    /* 三欄排版架構 */
     .dashboard-container {
       display: grid;
       grid-template-columns: 1fr 1.2fr 1fr;
@@ -116,6 +118,7 @@
       margin-bottom: 14px;
     }
 
+    /* 第一欄：分類與搜尋 */
     .search-row {
       display: flex;
       gap: 8px;
@@ -191,6 +194,7 @@
       box-shadow: 0 2px 4px rgba(239, 68, 68, 0.25);
     }
 
+    /* 第二欄：零件明細清單 */
     .items-container {
       flex: 1;
       overflow-y: auto;
@@ -232,6 +236,7 @@
       justify-content: space-between;
     }
 
+    /* 第三欄：低庫存警戒清單與匯出 */
     .scope-selector {
       display: flex;
       gap: 12px;
@@ -307,6 +312,7 @@
       color: #ffffff;
     }
 
+    /* 彈窗樣式 */
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -396,6 +402,7 @@
   </header>
 
   <div class="dashboard-container">
+    <!-- 第一欄：分類與搜尋 -->
     <div class="column-box">
       <div class="search-row">
         <input type="text" id="categorySearch" class="search-input" placeholder="現有零件搜尋（分類）" oninput="renderCategories()">
@@ -404,11 +411,13 @@
       <div class="category-list" id="categoryList"></div>
     </div>
 
+    <!-- 第二欄：分類所屬零件清單 -->
     <div class="column-box">
       <div class="col-header-badge" id="currentCategoryLabel">剛剛在 ① 選的零件分類</div>
       <div class="items-container" id="itemsContainer"></div>
     </div>
 
+    <!-- 第三欄：低庫存清單與匯出 -->
     <div class="column-box">
       <div class="col-header-badge" style="background-color: #fee2e2; border-color: var(--coral-red); color: #991b1b;">
         低 庫 存 清 單
@@ -426,6 +435,7 @@
     </div>
   </div>
 
+  <!-- 零件修改彈窗 -->
   <div class="modal-overlay" id="editModal">
     <div class="modal-content">
       <div class="modal-header">編輯零件庫存</div>
@@ -524,7 +534,7 @@
     }
 
     function resetToDefaultData() {
-      if (confirm("確定要重置為預設示範資料嗎？")) {
+      if (confirm("確定要重置為預設示範資料嗎？（這將清除所有已匯入與修改的資料）")) {
         currentProducts = JSON.parse(JSON.stringify(defaultProducts));
         selectedCategory = currentProducts[0]["產品所屬分類"];
         saveState();
@@ -558,6 +568,11 @@
       if (filteredCategories.length === 0) {
         categoryListEl.innerHTML = `<div class="empty-hint">無匹配分類</div>`;
         return;
+      }
+
+      // 如果當前選取的分類不存在於列表中，預設選取第一個
+      if (!filteredCategories.includes(selectedCategory) && filteredCategories.length > 0) {
+        selectedCategory = filteredCategories[0];
       }
 
       filteredCategories.forEach(cat => {
@@ -687,30 +702,42 @@
       }
     }
 
-    // 終極全自動匯入引擎（完全寬容模式）
+    function cleanStr(v) {
+      if (v === null || v === undefined) return "";
+      return String(v).replace(/[\r\n\t\s\|]/g, "");
+    }
+
+    // 核心匯入引擎：支援 UTF-8 防亂碼、自動跳過表頭、保留舊資料合併累加
     function handleFileImport(e) {
       const file = e.target.files[0];
       if (!file) return;
 
       const reader = new FileReader();
+      const isCsv = file.name.toLowerCase().endsWith('.csv');
+
       reader.onload = function(evt) {
         try {
-          const data = new Uint8Array(evt.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
+          let workbook;
+          if (isCsv) {
+            // CSV 強制指定 UTF-8 格式字串讀取，徹底杜絕中文亂碼
+            const text = evt.target.result;
+            workbook = XLSX.read(text, { type: 'string', raw: true });
+          } else {
+            // Excel (.xlsx/.xls) 二進位讀取
+            const data = new Uint8Array(evt.target.result);
+            workbook = XLSX.read(data, { type: 'array' });
+          }
 
           let parsedItems = [];
           let loadedSheetName = "";
 
-          // 巡檢所有工作表
+          // 巡檢檔案內的所有工作表
           for (const sheetName of workbook.SheetNames) {
             const worksheet = workbook.Sheets[sheetName];
-            // 讀取為純二維矩陣（完全不看鍵值）
             const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
             if (!rows || rows.length < 2) continue;
 
-            // 尋找資料起始行（只要某一行第 0 欄像產品名、或第 3、4 欄是數字即可）
             let dataStartIndex = 1;
-            // 如果第 0 行本身就是資料（第一格不是包含"名稱"字樣），那就從 0 開始
             const firstCellText = String(rows[0][0] || "");
             if (!firstCellText.includes("名稱") && !firstCellText.includes("產品")) {
               dataStartIndex = 0;
@@ -721,7 +748,7 @@
               if (!row || row.length === 0) continue;
 
               const pName = String(row[0] || "").trim();
-              if (!pName || pName.includes("產品名稱")) continue; // 標題行或空行跳過
+              if (!pName || pName.includes("產品名稱")) continue;
 
               const pCode = String(row[1] || "").trim();
               const pCat = String(row[2] || "未分類").trim();
@@ -748,22 +775,49 @@
             return;
           }
 
-          currentProducts = parsedItems;
-          selectedCategory = currentProducts[0]["產品所屬分類"];
+          // 核心升級：保留舊資料，依料號智慧合併更新（Upsert 邏輯）
+          let addedCount = 0;
+          let updatedCount = 0;
+
+          parsedItems.forEach(newItem => {
+            const existingIndex = currentProducts.findIndex(p => 
+              (newItem["產品代碼"] && p["產品代碼"] === newItem["產品代碼"]) ||
+              (!newItem["產品代碼"] && p["產品名稱"] === newItem["產品名稱"])
+            );
+
+            if (existingIndex > -1) {
+              currentProducts[existingIndex] = newItem;
+              updatedCount++;
+            } else {
+              currentProducts.push(newItem);
+              addedCount++;
+            }
+          });
+
+          // 自動切換至本次匯入的新分類
+          selectedCategory = parsedItems[0]["產品所屬分類"];
+
           saveState();
           renderCategories();
           renderItems();
           renderAlerts();
-          alert(`🎉 成功從 [${loadedSheetName}] 匯入 ${currentProducts.length} 筆零件資料！`);
+
+          alert(`🎉 匯入完成！\n新增 ${addedCount} 筆新品項、更新 ${updatedCount} 筆舊品項。\n全廠目前累積共 ${currentProducts.length} 筆零件資料！`);
         } catch (err) {
           console.error(err);
           alert("檔案讀取發生錯誤：" + err.message);
         }
       };
-      reader.readAsArrayBuffer(file);
+
+      if (isCsv) {
+        reader.readAsText(file, 'utf-8');
+      } else {
+        reader.readAsArrayBuffer(file);
+      }
       e.target.value = "";
     }
 
+    // 一鍵匯出 Excel
     function exportLowStockExcel() {
       const scope = document.querySelector('input[name="alertScope"]:checked').value;
       let targetList = currentProducts;
@@ -811,6 +865,8 @@
   </script>
 </body>
 </html>
+
+
 
 
 
