@@ -96,7 +96,7 @@
       }
     }
 
-    /* 共同欄位樣式（對應草圖藍色框線） */
+    /* 共同欄位樣式 */
     .column-box {
       background-color: var(--card-bg);
       border: 2px solid var(--border-color);
@@ -168,7 +168,6 @@
       flex: 1;
     }
 
-    /* 草圖紅色分類按鈕 */
     .btn-category {
       background-color: #fee2e2;
       border: 1.5px solid var(--coral-red);
@@ -314,7 +313,7 @@
       color: #ffffff;
     }
 
-    /* 零件修改彈窗 (Modal) */
+    /* 零件修改彈窗 */
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -410,19 +409,13 @@
         <input type="text" id="categorySearch" class="search-input" placeholder="現有零件搜尋（分類）" oninput="renderCategories()">
         <button class="btn-search" title="搜尋" onclick="renderCategories()">🔍</button>
       </div>
-      <div class="category-list" id="categoryList">
-        <!-- 分類按鈕將動態產生 -->
-      </div>
+      <div class="category-list" id="categoryList"></div>
     </div>
 
     <!-- 第二欄：分類所屬零件清單 -->
     <div class="column-box">
-      <div class="col-header-badge" id="currentCategoryLabel">
-        剛剛在 ① 選的零件分類
-      </div>
-      <div class="items-container" id="itemsContainer">
-        <!-- 零件卡片將動態產生 -->
-      </div>
+      <div class="col-header-badge" id="currentCategoryLabel">剛剛在 ① 選的零件分類</div>
+      <div class="items-container" id="itemsContainer"></div>
     </div>
 
     <!-- 第三欄：低庫存清單與匯出 -->
@@ -438,14 +431,12 @@
           <input type="radio" name="alertScope" value="category" onchange="renderAlerts()"> 依當前分類顯示
         </label>
       </div>
-      <div class="alert-container" id="alertContainer">
-        <!-- 警報品項將動態產生 -->
-      </div>
+      <div class="alert-container" id="alertContainer"></div>
       <button class="btn-export" onclick="exportLowStockExcel()">一鍵匯出 (Excel 表)</button>
     </div>
   </div>
 
-  <!-- 零件詳細與修改彈窗 -->
+  <!-- 零件修改彈窗 -->
   <div class="modal-overlay" id="editModal">
     <div class="modal-content">
       <div class="modal-header">編輯零件庫存</div>
@@ -483,7 +474,6 @@
   </div>
 
   <script>
-    // 預設示範數據（依據草圖規格設置）
     const defaultProducts = [
       {
         "產品名稱": "CO3M-DRG 黑/紅-285MM-700P",
@@ -512,13 +502,6 @@
         "產品所屬分類": "自製 CO3 零件",
         "產品現有數量": 12,
         "產品低水位": 30
-      },
-      {
-        "產品名稱": "CO3CNC 下座接頭-DRG 專用",
-        "產品代碼": "SKU-CO3-CN01",
-        "產品所屬分類": "自製 CO3 零件",
-        "產品現有數量": 35,
-        "產品低水位": 30
       }
     ];
 
@@ -526,7 +509,6 @@
     let selectedCategory = "";
     let activeEditingIndex = -1;
 
-    // 初始化
     function init() {
       const savedData = localStorage.getItem("inventory_data");
       if (savedData) {
@@ -563,7 +545,6 @@
       }
     }
 
-    // 取得所有唯一分類
     function getAllCategories() {
       const categories = new Set();
       currentProducts.forEach(item => {
@@ -574,7 +555,6 @@
       return Array.from(categories);
     }
 
-    // 第一欄：渲染分類按鈕
     function renderCategories() {
       const categoryListEl = document.getElementById("categoryList");
       const searchKeyword = document.getElementById("categorySearch").value.trim().toLowerCase();
@@ -595,7 +575,6 @@
         const btn = document.createElement("button");
         btn.className = `btn-category ${cat === selectedCategory ? 'active' : ''}`;
         
-        // 計算該分類低水位品項數
         const lowStockCount = currentProducts.filter(item => 
           item["產品所屬分類"] === cat && Number(item["產品現有數量"]) < Number(item["產品低水位"])
         ).length;
@@ -609,7 +588,6 @@
           selectedCategory = cat;
           renderCategories();
           renderItems();
-          // 若第三欄切換為依分類顯示，需連動更新
           const scope = document.querySelector('input[name="alertScope"]:checked').value;
           if (scope === "category") {
             renderAlerts();
@@ -620,7 +598,6 @@
       });
     }
 
-    // 第二欄：渲染分類所屬零件
     function renderItems() {
       const itemsContainerEl = document.getElementById("itemsContainer");
       const currentCategoryLabelEl = document.getElementById("currentCategoryLabel");
@@ -655,7 +632,6 @@
       });
     }
 
-    // 第三欄：渲染低庫存警戒清單
     function renderAlerts() {
       const alertContainerEl = document.getElementById("alertContainer");
       const scope = document.querySelector('input[name="alertScope"]:checked').value;
@@ -667,7 +643,6 @@
         targetList = currentProducts.filter(item => item["產品所屬分類"] === selectedCategory);
       }
 
-      // 低庫存判斷標準：現有數量 < 低水位
       const lowStockList = targetList.filter(item => 
         Number(item["產品現有數量"]) < Number(item["產品低水位"])
       );
@@ -688,7 +663,6 @@
       });
     }
 
-    // 彈窗編輯邏輯
     function openEditModal(index) {
       activeEditingIndex = index;
       const item = currentProducts[index];
@@ -724,7 +698,12 @@
       }
     }
 
-    // Excel / CSV 匯入解析
+    // 升級版：智慧欄位清洗與跨工作表搜尋
+    function cleanText(str) {
+      if (str === null || str === undefined) return "";
+      return String(str).replace(/[\|\s\uFEFF\xA0]/g, "").trim();
+    }
+
     function handleFileImport(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -734,40 +713,65 @@
         try {
           const data = new Uint8Array(evt.target.result);
           const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-          if (jsonData.length === 0) {
-            alert("匯入的檔案無資料！");
+          let targetRows = null;
+          let foundSheet = "";
+
+          // 遍歷所有工作表，自動找到含有目標欄位的工作表
+          for (const sheetName of workbook.SheetNames) {
+            const worksheet = workbook.Sheets[sheetName];
+            const rawJson = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+            if (rawJson && rawJson.length > 0) {
+              const firstRowKeys = Object.keys(rawJson[0]).map(cleanText);
+              if (firstRowKeys.includes("產品名稱") && firstRowKeys.includes("產品所屬分類")) {
+                targetRows = rawJson;
+                foundSheet = sheetName;
+                break;
+              }
+            }
+          }
+
+          if (!targetRows) {
+            alert("找不到符合格式的工作表！\n請確認工作表第一列包含：產品名稱、產品代碼、產品所屬分類、產品現有數量、產品低水位");
             return;
           }
 
-          // 驗證是否具備約定之欄位格式
-          const requiredKeys = ["產品名稱", "產品代碼", "產品所屬分類", "產品現有數量", "產品低水位"];
-          const firstRow = jsonData[0];
-          const hasAllKeys = requiredKeys.every(k => Object.keys(firstRow).includes(k));
+          // 清洗並對應資料
+          currentProducts = targetRows.map(row => {
+            let item = {
+              "產品名稱": "",
+              "產品代碼": "",
+              "產品所屬分類": "未分類",
+              "產品現有數量": 0,
+              "產品低水位": 0
+            };
 
-          if (!hasAllKeys) {
-            alert("格式錯誤！輸入專用表第一列必須包含：\n產品名稱 ｜ 產品代碼 ｜ 產品所屬分類 ｜ 產品現有數量 ｜ 產品低水位");
+            for (const key of Object.keys(row)) {
+              const cleanedKey = cleanText(key);
+              const val = row[key];
+
+              if (cleanedKey.includes("產品名稱")) item["產品名稱"] = String(val).trim();
+              else if (cleanedKey.includes("產品代碼")) item["產品代碼"] = String(val).trim();
+              else if (cleanedKey.includes("產品所屬分類")) item["產品所屬分類"] = String(val).trim();
+              else if (cleanedKey.includes("產品現有數量")) item["產品現有數量"] = Number(val) || 0;
+              else if (cleanedKey.includes("產品低水位")) item["產品低水位"] = Number(val) || 0;
+            }
+            return item;
+          }).filter(p => p["產品名稱"] !== "");
+
+          if (currentProducts.length === 0) {
+            alert("工作表中未讀取到有效的零件名稱！");
             return;
           }
-
-          currentProducts = jsonData.map(row => ({
-            "產品名稱": String(row["產品名稱"] || ""),
-            "產品代碼": String(row["產品代碼"] || ""),
-            "產品所屬分類": String(row["產品所屬分類"] || "未分類"),
-            "產品現有數量": Number(row["產品現有數量"] || 0),
-            "產品低水位": Number(row["產品低水位"] || 0)
-          }));
 
           selectedCategory = currentProducts[0]["產品所屬分類"];
           saveState();
           renderCategories();
           renderItems();
           renderAlerts();
-          alert(`成功匯入 ${currentProducts.length} 筆零件資料！`);
+          alert(`成功從 [${foundSheet}] 匯入 ${currentProducts.length} 筆零件資料！`);
         } catch (err) {
+          console.error(err);
           alert("檔案解析失敗，請確認檔案格式是否正確。");
         }
       };
@@ -775,7 +779,6 @@
       e.target.value = "";
     }
 
-    // 一鍵匯出 Excel（輸出專用表）
     function exportLowStockExcel() {
       const scope = document.querySelector('input[name="alertScope"]:checked').value;
       let targetList = currentProducts;
@@ -784,7 +787,6 @@
         targetList = currentProducts.filter(item => item["產品所屬分類"] === selectedCategory);
       }
 
-      // 嚴格篩選出小於低水位的品項
       const exportData = targetList
         .filter(item => Number(item["產品現有數量"]) < Number(item["產品低水位"]))
         .map(item => ({
@@ -800,18 +802,16 @@
         return;
       }
 
-      // 生成 WorkSheet
       const ws = XLSX.utils.json_to_sheet(exportData, {
         header: ["產品名稱", "產品代碼", "產品所屬分類", "產品現有數量", "產品低水位"]
       });
 
-      // 設定欄寬自適應美化
       ws['!cols'] = [
-        { wch: 32 }, // 產品名稱
-        { wch: 16 }, // 產品代碼
-        { wch: 18 }, // 產品所屬分類
-        { wch: 14 }, // 產品現有數量
-        { wch: 14 }  // 產品低水位
+        { wch: 32 },
+        { wch: 16 },
+        { wch: 18 },
+        { wch: 14 },
+        { wch: 14 }
       ];
 
       const wb = XLSX.utils.book_new();
@@ -822,9 +822,9 @@
       XLSX.writeFile(wb, filename);
     }
 
-    // 啟動初始化
     window.onload = init;
   </script>
 </body>
 </html>
+
 
